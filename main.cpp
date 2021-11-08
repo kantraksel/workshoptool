@@ -95,7 +95,7 @@ int main()
 					for (auto& element : details)
 					{
 						std::string sid = element["publishedfileid"];
-						long id = std::stol(sid);
+						uintptr_t id = std::stoull(sid);
 						addons.push_back(id);
 						Log("Adding addon from collection: " + std::to_string(id));
 					}
