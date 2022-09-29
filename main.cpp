@@ -143,6 +143,13 @@ int main()
 
 				for (auto& element : details)
 				{
+					result = element["result"];
+					if (result != 1)
+					{
+						Log("Could not get details for addon " + (std::string)element["publishedfileid"]);
+						continue;
+					}
+
 					auto path = std::filesystem::path((std::string)element["filename"]);
 					downloadQueue.push({ element["file_url"], path.filename().string() });
 				}
@@ -192,13 +199,10 @@ int main()
 		auto res = downloader.Get(
 			suburl.c_str(), httplib::Headers(),
 			[&](const char *data, size_t data_length) {
-			os.write(data, data_length);
-			return true;
-		},
-			[](uint64_t len, uint64_t total) {
-			printf("%lld / %lld bytes => %d%% complete\n", len, total, (int)(len * 100 / total));
-			return true;
-		});
+				os.write(data, data_length);
+				return true;
+			}
+		);
 
 		os.close();
 		if (res.error() == httplib::Error::Success && res.value().status == 200) Log("Download completed!");
