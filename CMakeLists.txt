@@ -11,9 +11,9 @@ add_subdirectory(json)
 find_package(CURL CONFIG REQUIRED)
 
 if(TOOL_HEADLESS)
-	set(TOOL_HEADLESS TRUE)
+	set(TOOL_HEADLESS true)
 else()
-	set(TOOL_HEADLESS FALSE)
+	set(TOOL_HEADLESS false)
 endif()
 configure_file(version.h.in version.h)
 

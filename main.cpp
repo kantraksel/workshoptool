@@ -1,4 +1,4 @@
-#include <conio.h>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <format>
@@ -10,12 +10,6 @@
 #include "HttpClient.h"
 #include "nlohmann/json.hpp"
 #include "version.h"
-
-#if HEADLESS
-	#define GETCH()
-#else
-	#define GETCH() getch()
-#endif
 
 const char* szCollectionUrl = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1";
 const char* szAddonUrl = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1";
@@ -39,16 +33,26 @@ static inline void Log(const std::_Fmt_string<Args...> _Fmt, Args&&... _Args)
 	Log(std::vformat(_Fmt._Str, std::make_format_args(_Args...)));
 }
 
-void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t collectionId);
+void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t& collectionId);
 void ResolveCollection(Http::Client& client, uintptr_t collection, std::list<uintptr_t>& addons);
 void ResolveAddons(Http::Client& client, const std::list<uintptr_t>& addons, std::queue<StringTuplet>& downloadQueue);
 void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueue);
 
-void FailExit(const char* msg)
+int Exit(const char* msg, int code = 0)
 {
 	Log(msg);
-	GETCH();
-	std::exit(1);
+
+#if not HEADLESS
+	Log("Press any key to exit");
+	std::getchar();
+#endif
+
+	return code;
+}
+
+inline void FailExit(const char* msg)
+{
+	std::exit(Exit(msg, 1));
 }
 
 int main()
@@ -63,7 +67,7 @@ int main()
 	ResolveCollection(client, collection, addons);
 
 	if (addons.empty())
-		FailExit("No addons to download. Exiting...");
+		return Exit("No addons to download");
 
 	Log("Addons in queue: {}", addons.size());
 	Log("Resolving urls...");
@@ -72,16 +76,14 @@ int main()
 	ResolveAddons(client, addons, downloadQueue);
 
 	if (downloadQueue.empty())
-		FailExit("No addons resolved. Exiting...");
+		return Exit("No addons resolved");
 
 	Log("Resolved urls: {}", downloadQueue.size());
 
 	std::filesystem::create_directory("wst");
 	DownloadAddons(client, downloadQueue);
 
-	Log("Done");
-	GETCH();
-	return 0;
+	return Exit("Done");
 }
 
 bool Post(Http::Client& client, const char* path, Http::Params& params, PostResponse response);
@@ -123,7 +125,7 @@ void ResolveCollection(Http::Client& client, uintptr_t collection, std::list<uin
 			});
 
 		if (!result)
-			FailExit("Exiting...");
+			FailExit("");
 	}
 	else Log("No collection specified");
 }
@@ -172,24 +174,26 @@ void ResolveAddons(Http::Client& client, const std::list<uintptr_t>& addons, std
 		});
 
 	if (!result)
-		FailExit("Exiting...");
+		FailExit("");
 }
 
 void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueue)
 {
+	std::filesystem::current_path("wst/");
+	std::ofstream os;
+
 	while (!downloadQueue.empty())
 	{
 		StringTuplet entry = downloadQueue.front();
 		downloadQueue.pop();
 
-		std::ofstream os("wst/" + entry.second);
-		if (os.fail())
+		if (os.open(entry.second), !os)
 		{
 			Log("Could not open {} Skipping...", entry.second);
 			continue;
 		}
 
-		Log("Downloading {}", entry.first);
+		Log("Downloading {}", entry.second);
 
 		auto res = client.Get(
 			entry.first.c_str(),
@@ -205,7 +209,7 @@ void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueu
 	}
 }
 
-void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t collectionId)
+void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t& collectionId)
 {
 	uintptr_t entry;
 	std::ifstream is(name);
