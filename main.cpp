@@ -7,7 +7,7 @@
 #include <queue>
 #include <string>
 
-#include "httplib.h"
+#include "HttpClient.h"
 #include "nlohmann/json.hpp"
 #include "version.h"
 
@@ -17,12 +17,8 @@
 	#define GETCH() getch()
 #endif
 
-#define BASE_SUBURL "/ISteamRemoteStorage/"
-const char* szBaseUrl = "https://api.steampowered.com";
-const char* szCollectionUrl = BASE_SUBURL "GetCollectionDetails/v1";
-const char* szAddonUrl = BASE_SUBURL "GetPublishedFileDetails/v1";
-const char* szDownloadUrl = "https://steamusercontent-a.akamaihd.net";
-#undef BASE_SUBURL
+const char* szCollectionUrl = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1";
+const char* szAddonUrl = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1";
 
 using PostResponse = std::function<void(const std::string& body)>;
 
@@ -44,9 +40,9 @@ static inline void Log(const std::_Fmt_string<Args...> _Fmt, Args&&... _Args)
 }
 
 void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t collectionId);
-void ResolveCollection(httplib::Client& client, uintptr_t collection, std::list<uintptr_t>& addons);
-void ResolveAddons(httplib::Client& client, const std::list<uintptr_t>& addons, std::queue<StringTuplet>& downloadQueue);
-void DownloadAddons(std::queue<StringTuplet>& downloadQueue);
+void ResolveCollection(Http::Client& client, uintptr_t collection, std::list<uintptr_t>& addons);
+void ResolveAddons(Http::Client& client, const std::list<uintptr_t>& addons, std::queue<StringTuplet>& downloadQueue);
+void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueue);
 
 void FailExit(const char* msg)
 {
@@ -59,7 +55,7 @@ int main()
 {
 	Log("WorkShop Tool " VERSION);
 
-	httplib::Client client(szBaseUrl);
+	Http::Client client;
 	std::list<uintptr_t> addons;
 
 	uintptr_t collection = 0;
@@ -81,23 +77,22 @@ int main()
 	Log("Resolved urls: {}", downloadQueue.size());
 
 	std::filesystem::create_directory("wst");
-	DownloadAddons(downloadQueue);
+	DownloadAddons(client, downloadQueue);
 
 	Log("Done");
 	GETCH();
 	return 0;
 }
 
-bool Post(httplib::Client& client, const char* path, httplib::Params& params, PostResponse response);
-std::string StripDownloadUrl(std::string url);
+bool Post(Http::Client& client, const char* path, Http::Params& params, PostResponse response);
 
-void ResolveCollection(httplib::Client& client, uintptr_t collection, std::list<uintptr_t>& addons)
+void ResolveCollection(Http::Client& client, uintptr_t collection, std::list<uintptr_t>& addons)
 {
 	if (collection != 0)
 	{
 		Log("Resolving collection: " + std::to_string(collection));
 
-		httplib::Params params;
+		Http::Params params;
 		params.emplace("collectioncount", "1");
 		params.emplace("publishedfileids[0]", std::to_string(collection));
 
@@ -133,9 +128,9 @@ void ResolveCollection(httplib::Client& client, uintptr_t collection, std::list<
 	else Log("No collection specified");
 }
 
-void ResolveAddons(httplib::Client& client, const std::list<uintptr_t>& addons, std::queue<StringTuplet>& downloadQueue)
+void ResolveAddons(Http::Client& client, const std::list<uintptr_t>& addons, std::queue<StringTuplet>& downloadQueue)
 {
-	httplib::Params params;
+	Http::Params params;
 	params.emplace("itemcount", std::to_string(addons.size()));
 
 	int index = 0;
@@ -180,19 +175,12 @@ void ResolveAddons(httplib::Client& client, const std::list<uintptr_t>& addons, 
 		FailExit("Exiting...");
 }
 
-void DownloadAddons(std::queue<StringTuplet>& downloadQueue)
+void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueue)
 {
 	while (!downloadQueue.empty())
 	{
 		StringTuplet entry = downloadQueue.front();
 		downloadQueue.pop();
-
-		std::string suburl = StripDownloadUrl(entry.first);
-		if (suburl.length() == entry.first.length())
-		{
-			Log("Could not strip {} Skipping...", entry.first);
-			continue;
-		}
 
 		std::ofstream os("wst/" + entry.second);
 		if (os.fail())
@@ -201,21 +189,18 @@ void DownloadAddons(std::queue<StringTuplet>& downloadQueue)
 			continue;
 		}
 
-		//dirty, but this library does not support another approach
-		httplib::Client downloader(szDownloadUrl);
-
 		Log("Downloading {}", entry.first);
 
-		auto res = downloader.Get(
-			suburl.c_str(), httplib::Headers(),
+		auto res = client.Get(
+			entry.first.c_str(),
 			[&](const char* data, size_t data_length) {
 				os.write(data, data_length);
-				return true;
+				return (bool)os;
 			}
 		);
 
 		os.close();
-		if (res.error() == httplib::Error::Success && res.value().status == 200) Log("Download completed!");
+		if (res.error == Http::NoError && res.status == 200) Log("Download completed!");
 		else Log("Download failed!");
 	}
 }
@@ -241,44 +226,21 @@ void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t collectionI
 	}
 }
 
-bool Post(httplib::Client& client, const char* path, httplib::Params& params, PostResponse response)
+bool Post(Http::Client& client, const char* path, Http::Params& params, PostResponse response)
 {
 	auto result = client.Post(path, params);
-	if (result.error() != httplib::Error::Success)
+	if (result.error != Http::NoError)
 	{
-		Log("httplib error: {}", (int)result.error());
+		Log("Request error: {}", result.error);
 		return false;
 	}
 
-	auto& resultResponse = result.value();
-	Log("Request status: {}", resultResponse.status);
-	if (resultResponse.status == 200)
+	Log("Request status: {}", result.status);
+	if (result.status == 200)
 	{
-		response(resultResponse.body);
+		response(result.body);
 		return true;
 	}
 
 	return false;
-}
-
-std::string StripDownloadUrl(std::string url)
-{
-	int size = strlen(szDownloadUrl);
-	if (url.length() > size)
-	{
-		bool match = true;
-		for (int i = 0; i < size; ++i)
-		{
-			if (url[i] != szDownloadUrl[i])
-			{
-				match = false;
-				break;
-			}
-		}
-
-		if (match)
-			url = url.substr(size);
-	}
-
-	return url;
 }
