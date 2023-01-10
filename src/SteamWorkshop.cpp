@@ -131,11 +131,23 @@ bool SteamWorkshop::ResolveAddons(Http::Client& client, AddonList& addons)
 				auto& addon = addons[id];
 
 				auto file = std::filesystem::path((std::string)element["filename"]).filename();
+				addon.name = element["title"];
+
+				addon.url = element["file_url"];
+				if (addon.url.empty())
+				{
+					Log("Addon '{}' has no download url - usually it means game's workshop is private!", addon.name);
+					continue;
+				}
 
 				addon.file = file.string();
-				addon.url = element["file_url"];
+				if (addon.file.empty())
+				{
+					Log("Addon '{}' has no file name - setting file name to default value", addon.name);
+					addon.file = std::format("{}.addon", id);
+				}
+
 				addon.size = element["file_size"];
-				addon.name = element["title"];
 				addon.download = true;
 				++resolvedAddons;
 			}
@@ -144,6 +156,8 @@ bool SteamWorkshop::ResolveAddons(Http::Client& client, AddonList& addons)
 		});
 
 	Log("Addons ready to download: {}", resolvedAddons);
+	if (resolvedAddons == 0)
+		return false;
 
 	return result;
 }

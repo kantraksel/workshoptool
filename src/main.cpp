@@ -80,6 +80,9 @@ void LoadCollections(Http::Client& client, AddonList& addons)
 	ReadFile(szCollectionList, collections);
 	Log("Loaded collections: {}", collections.size());
 
+	if (collections.empty())
+		return;
+
 	Log("Downloading collection info...");
 	if (!SteamWorkshop::ResolveCollections(client, collections, addons))
 		FailExit();
@@ -90,6 +93,12 @@ void LoadStandaloneAddons(AddonList& addons)
 	Log("Loading addons from {}", szAddonList);
 	std::set<uintptr_t> addonIdList;
 	ReadFile(szAddonList, addonIdList);
+
+	if (addonIdList.empty())
+	{
+		Log("Loaded addons: 0");
+		return;
+	}
 
 	int addonsAdded = 0;
 	int addonsOmitted = 0;

@@ -2,7 +2,7 @@
 
 Simple tool for downloading addons from Steam Workshop.
 
-Tool has been designed for L4D2 dedicated servers (where host_workshop_collection still does not exist), but should work for any other game's workshop.
+Tool has been designed for L4D2 dedicated servers (where host_workshop_collection still does not exist), but should work for any other game's workshop (sometimes workshop is private and you need to use Steam or external web services).
 
 [MIT Licensed](./LICENSE)
 
