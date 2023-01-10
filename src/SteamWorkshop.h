@@ -10,12 +10,15 @@ struct AddonInfo
 	std::string file;
 	uintptr_t size;
 	std::string url;
+	bool download;
+
+	AddonInfo();
 };
 
 typedef std::map<uintptr_t, AddonInfo> AddonList;
 
 struct SteamWorkshop
 {
-	static bool ResolveCollection(Http::Client& client, uintptr_t collectionId, AddonList& addons);
+	static bool ResolveCollections(Http::Client& client, std::set<uintptr_t> collections, AddonList& addons);
 	static bool ResolveAddons(Http::Client& client, AddonList& addons);
 };

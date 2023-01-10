@@ -5,7 +5,7 @@ using namespace Http;
 
 static size_t DefaultResponseWrite(void* ptr, size_t _, size_t size, void* udata)
 {
-	auto& str = *reinterpret_cast<std::string *>(udata);
+	auto& str = *reinterpret_cast<std::string*>(udata);
 
 	str.append(std::string_view(static_cast<char*>(ptr), size));
 	return size;
@@ -50,7 +50,7 @@ static void ConvertParams(const Params& params, std::string& outParams)
 	outParams.push_back(0);
 }
 
-Response Client::Post(const char* path, Params params)
+Response Client::Post(const char* path, const Params& params)
 {
 	if (!handle) return Response{ CURLcode::CURLE_FAILED_INIT, 0 };
 	Response response{ 0, 0 };

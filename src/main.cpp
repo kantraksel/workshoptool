@@ -21,7 +21,7 @@ int Exit(const char* msg, int code = 0)
 {
 	Log(msg);
 
-#if not HEADLESS
+#if ENABLEGETCH
 	Log("Press any key to exit");
 	std::getchar();
 #endif
@@ -36,7 +36,7 @@ inline void FailExit(const char* msg = "")
 
 int main()
 {
-	Log("WorkShop Tool " VERSION);
+	Log("Workshop Tool " VERSION);
 
 	Http::Client client;
 	AddonList addons;
@@ -75,26 +75,36 @@ void ReadFile(const char* name, std::set<uintptr_t>& ids)
 
 void LoadCollections(Http::Client& client, AddonList& addons)
 {
+	Log("Loading collections from {}", szCollectionList);
 	std::set<uintptr_t> collections;
 	ReadFile(szCollectionList, collections);
+	Log("Loaded collections: {}", collections.size());
 
-	for (auto collection : collections)
-	{
-		if (!SteamWorkshop::ResolveCollection(client, collection, addons))
-			FailExit();
-	}
+	Log("Downloading collection info...");
+	if (!SteamWorkshop::ResolveCollections(client, collections, addons))
+		FailExit();
 }
 
 void LoadStandaloneAddons(AddonList& addons)
 {
+	Log("Loading addons from {}", szAddonList);
 	std::set<uintptr_t> addonIdList;
 	ReadFile(szAddonList, addonIdList);
 
+	int addonsAdded = 0;
+	int addonsOmitted = 0;
+
 	for (auto id : addonIdList)
 	{
-		addons.try_emplace(id);
+		auto result = addons.try_emplace(id);
+		if (result.second) ++addonsAdded;
+		else ++addonsOmitted;
 	}
+
+	Log("Queued addons: {} added, {} duplicates omitted", addonsAdded, addonsOmitted);
 }
+
+std::string ParseSize(uintptr_t size);
 
 void DownloadAddons(Http::Client& client, AddonList& addons)
 {
@@ -104,13 +114,16 @@ void DownloadAddons(Http::Client& client, AddonList& addons)
 	{
 		auto& addon = item.second;
 
-		if (os.open(addon.file), !os)
+		if (!addon.download)
+			continue;
+
+		if (os.open(addon.file, std::ios::binary), !os)
 		{
 			Log("Could not open {} Skipping...", addon.file);
 			continue;
 		}
 
-		Log("Downloading {}", addon.file);
+		Log("Downloading {} (size: {} file: {})", addon.name, ParseSize(addon.size), addon.file);
 
 		auto res = client.Get(
 			addon.url.c_str(),
@@ -121,9 +134,42 @@ void DownloadAddons(Http::Client& client, AddonList& addons)
 		);
 
 		os.close();
-		if (res.error == Http::NoError && res.status == 200) Log("Download completed!");
+		if (res.error == Http::NoError && res.status == 200) Log("Download completed");
 		else Log("Download failed!");
 	}
+}
+
+std::string ParseSize(uintptr_t size)
+{
+	constexpr uintptr_t kB = 1024;
+	constexpr uintptr_t MB = kB * 1024;
+	constexpr uintptr_t GB = MB * 1024;
+
+	float fsize;
+	const char* unit = nullptr;
+
+	if (size > GB)
+	{
+		fsize = (float)size / GB;
+		unit = "GB";
+	}
+	else if (size > MB)
+	{
+		fsize = (float)size / MB;
+		unit = "MB";
+	}
+	else if (size > kB)
+	{
+		fsize = (float)size / kB;
+		unit = "kB";
+	}
+	else
+	{
+		fsize = size;
+		unit = "B";
+	}
+
+	return std::format("{:.2f}{}", fsize, unit);
 }
 
 void Log(const std::string& str)

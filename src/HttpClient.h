@@ -25,7 +25,7 @@ namespace Http
 			Client();
 			~Client();
 
-			Response Post(const char* path, Params params);
+			Response Post(const char* path, const Params& params);
 			Response Get(const char* path, WriteCallback writeCallback);
 	};
 }

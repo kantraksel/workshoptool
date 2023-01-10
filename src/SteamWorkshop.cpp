@@ -1,3 +1,4 @@
+#include <set>
 #include "nlohmann/json.hpp"
 #include "HttpClient.h"
 #include "Log.h"
@@ -14,7 +15,7 @@ static bool Post(Http::Client& client, const char* path, Http::Params& params, s
 		return false;
 	}
 
-	Log("Request status: {}", result.status);
+	Log("Response status: {}", result.status);
 	if (result.status == 200)
 	{
 		try
@@ -25,15 +26,23 @@ static bool Post(Http::Client& client, const char* path, Http::Params& params, s
 			int result = response["result"];
 			int resultCount = response["resultcount"];
 
-			if (result == 1 && itemCount == resultCount)
+			if (result != 1)
 			{
-				return callback(response);
+				Log("Invalid resource result: {}", result);
+				Log("Location: {}", path);
 			}
-			else Log("Response: result({}) resultcount({})", result, resultCount);
+			else if (itemCount != resultCount)
+			{
+				Log("Unexpected resource count: expected {} got {}", itemCount, resultCount);
+				Log("Location: {}", path);
+			}
+			else return callback(response);
 		}
 		catch (nlohmann::json::exception e)
 		{
-			Log("Invalid response: {}", result.body);
+			Log("Invalid response: {}", e.what());
+			Log("Location: {} ItemCount: {} Response:", path, itemCount);
+			Log(result.body);
 		}
 	}
 
@@ -45,16 +54,19 @@ static inline uintptr_t ToULL(const nlohmann::json& node)
 	return std::stoull((std::string)node);
 }
 
-bool SteamWorkshop::ResolveCollection(Http::Client& client, uintptr_t collectionId, AddonList& addons)
+bool SteamWorkshop::ResolveCollections(Http::Client& client, std::set<uintptr_t> collections, AddonList& addons)
 {
-	auto szCollectionId = std::to_string(collectionId);
-	Log("Resolving collection: {}", szCollectionId);
-
 	Http::Params params;
-	params.emplace("collectioncount", "1");
-	params.emplace("publishedfileids[0]", szCollectionId);
+	params.emplace("collectioncount", std::to_string(collections.size()));
 
-	bool result = Post(client, szCollectionUrl, params, 1, [&](const nlohmann::json& json)
+	int index = 0;
+	for (auto& item : collections)
+	{
+		params.emplace(std::format("publishedfileids[{}]", index), std::to_string(item));
+		++index;
+	}
+
+	bool result = Post(client, szCollectionUrl, params, collections.size(), [&](const nlohmann::json& json)
 		{
 			auto& details = json["collectiondetails"];
 
@@ -67,13 +79,19 @@ bool SteamWorkshop::ResolveCollection(Http::Client& client, uintptr_t collection
 					continue;
 				}
 
+				int addonsAdded = 0;
+				int addonsOmitted = 0;
+
 				auto& children = collection["children"];
 				for (auto& element : children)
 				{
 					uintptr_t id = ToULL(element["publishedfileid"]);
-					addons.try_emplace(id);
-					Log("Adding addon from collection: {}", id);
+					auto result = addons.try_emplace(id);
+					if (result.second) ++addonsAdded;
+					else ++addonsOmitted;
 				}
+
+				Log("Resolved collection {}: {} addons added, {} duplicated addons omitted", cid, addonsAdded, addonsOmitted);
 			}
 			
 			return true;
@@ -94,19 +112,22 @@ bool SteamWorkshop::ResolveAddons(Http::Client& client, AddonList& addons)
 		++index;
 	}
 
+	int resolvedAddons = 0;
+
 	bool result = Post(client, szAddonUrl, params, addons.size(), [&](const nlohmann::json& json)
 		{
 			auto& details = json["publishedfiledetails"];
 
 			for (auto& element : details)
 			{
+				uintptr_t id = ToULL(element["publishedfileid"]);
+
 				if (element["result"] != 1)
 				{
-					Log("Could not get details for addon {}", (std::string)element["publishedfileid"]);
+					Log("Could not get details for addon {}", id);
 					continue;
 				}
 
-				uintptr_t id = ToULL(element["publishedfileid"]);
 				auto& addon = addons[id];
 
 				auto file = std::filesystem::path((std::string)element["filename"]).filename();
@@ -114,11 +135,21 @@ bool SteamWorkshop::ResolveAddons(Http::Client& client, AddonList& addons)
 				addon.file = file.string();
 				addon.url = element["file_url"];
 				addon.size = element["file_size"];
+				addon.name = element["title"];
+				addon.download = true;
+				++resolvedAddons;
 			}
 
 			return true;
 		});
 
+	Log("Addons ready to download: {}", resolvedAddons);
+
 	return result;
 }
 
+AddonInfo::AddonInfo()
+{
+	size = 0;
+	download = false;
+}
