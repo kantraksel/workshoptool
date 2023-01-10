@@ -15,7 +15,7 @@ endif()
 
 configure_file(version.h.in version.h)
 
-add_executable(tool main.cpp HttpClient.cpp)
+add_executable(tool main.cpp HttpClient.cpp SteamWorkshop.cpp)
 target_include_directories(tool PRIVATE ${PROJECT_BINARY_DIR})
 target_link_libraries(tool PRIVATE CURL::libcurl nlohmann_json::nlohmann_json)
 install(TARGETS tool DESTINATION bin)

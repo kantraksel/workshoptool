@@ -1,42 +1,21 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <format>
 #include <iostream>
-#include <list>
-#include <queue>
-#include <string>
+#include <set>
 
 #include "HttpClient.h"
-#include "nlohmann/json.hpp"
+#include "Log.h"
+#include "SteamWorkshop.h"
 #include "version.h"
 
-const char* szCollectionUrl = "https://api.steampowered.com/ISteamRemoteStorage/GetCollectionDetails/v1";
-const char* szAddonUrl = "https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1";
+constexpr const char* szCollectionList = "collections.txt";
+constexpr const char* szAddonList = "addons.txt";
+constexpr const char* szOutputDir = "addons";
 
-using PostResponse = std::function<void(const std::string& body)>;
-
-struct StringTuplet
-{
-	std::string first;
-	std::string second;
-};
-
-static void Log(const std::string& str)
-{
-	std::cout << str << std::endl;
-}
-
-template <class... Args>
-static inline void Log(const std::_Fmt_string<Args...> _Fmt, Args&&... _Args)
-{
-	Log(std::vformat(_Fmt._Str, std::make_format_args(_Args...)));
-}
-
-void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t& collectionId);
-void ResolveCollection(Http::Client& client, uintptr_t collection, std::list<uintptr_t>& addons);
-void ResolveAddons(Http::Client& client, const std::list<uintptr_t>& addons, std::queue<StringTuplet>& downloadQueue);
-void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueue);
+void LoadCollections(Http::Client& client, AddonList& addons);
+void LoadStandaloneAddons(AddonList& addons);
+void DownloadAddons(Http::Client& client, AddonList& addons);
 
 int Exit(const char* msg, int code = 0)
 {
@@ -50,7 +29,7 @@ int Exit(const char* msg, int code = 0)
 	return code;
 }
 
-inline void FailExit(const char* msg)
+inline void FailExit(const char* msg = "")
 {
 	std::exit(Exit(msg, 1));
 }
@@ -60,143 +39,81 @@ int main()
 	Log("WorkShop Tool " VERSION);
 
 	Http::Client client;
-	std::list<uintptr_t> addons;
+	AddonList addons;
 
-	uintptr_t collection = 0;
-	ReadFile("steam.wst", addons, collection);
-	ResolveCollection(client, collection, addons);
+	LoadStandaloneAddons(addons);
+	LoadCollections(client, addons);
 
 	if (addons.empty())
 		return Exit("No addons to download");
 
 	Log("Addons in queue: {}", addons.size());
-	Log("Resolving urls...");
+	Log("Downloading addon info...");
 
-	std::queue<StringTuplet> downloadQueue;
-	ResolveAddons(client, addons, downloadQueue);
+	if (!SteamWorkshop::ResolveAddons(client, addons))
+		FailExit();
 
-	if (downloadQueue.empty())
-		return Exit("No addons resolved");
+	Log("Downloading addons...");
 
-	Log("Resolved urls: {}", downloadQueue.size());
-
-	std::filesystem::create_directory("wst");
-	DownloadAddons(client, downloadQueue);
+	std::filesystem::create_directory(szOutputDir);
+	std::filesystem::current_path(szOutputDir);
+	DownloadAddons(client, addons);
 
 	return Exit("Done");
 }
 
-bool Post(Http::Client& client, const char* path, Http::Params& params, PostResponse response);
-
-void ResolveCollection(Http::Client& client, uintptr_t collection, std::list<uintptr_t>& addons)
+void ReadFile(const char* name, std::set<uintptr_t>& ids)
 {
-	if (collection != 0)
+	uintptr_t entry;
+	std::ifstream is(name);
+
+	while (is >> entry)
 	{
-		Log("Resolving collection: " + std::to_string(collection));
-
-		Http::Params params;
-		params.emplace("collectioncount", "1");
-		params.emplace("publishedfileids[0]", std::to_string(collection));
-
-		bool result = Post(client, szCollectionUrl, params, [&](const std::string& body) {
-			try
-			{
-				auto json = nlohmann::json::parse(body)["response"];
-				int result = json["result"];
-				int resultcount = json["resultcount"];
-				if (result == resultcount == 1)
-				{
-					auto& details = json["collectiondetails"][0]["children"];
-
-					for (auto& element : details)
-					{
-						std::string sid = element["publishedfileid"];
-						uintptr_t id = std::stoull(sid);
-						addons.push_back(id);
-						Log("Adding addon from collection: {}", id);
-					}
-				}
-				else Log("Response: result({}) resultcount({})", result, resultcount);
-			}
-			catch (...)
-			{
-				Log("Invalid response: {}", body);
-			}
-			});
-
-		if (!result)
-			FailExit("");
+		ids.emplace(entry);
 	}
-	else Log("No collection specified");
 }
 
-void ResolveAddons(Http::Client& client, const std::list<uintptr_t>& addons, std::queue<StringTuplet>& downloadQueue)
+void LoadCollections(Http::Client& client, AddonList& addons)
 {
-	Http::Params params;
-	params.emplace("itemcount", std::to_string(addons.size()));
+	std::set<uintptr_t> collections;
+	ReadFile(szCollectionList, collections);
 
-	int index = 0;
-	for (auto& element : addons)
+	for (auto collection : collections)
 	{
-		params.emplace(std::format("publishedfileids[{}]", index), std::to_string(element));
-		++index;
+		if (!SteamWorkshop::ResolveCollection(client, collection, addons))
+			FailExit();
 	}
-
-	bool result = Post(client, szAddonUrl, params, [&](const std::string& body) {
-		try
-		{
-			auto json = nlohmann::json::parse(body)["response"];
-			int result = json["result"];
-			int resultcount = json["resultcount"];
-			if (result == 1 && resultcount == addons.size())
-			{
-				auto& details = json["publishedfiledetails"];
-
-				for (auto& element : details)
-				{
-					result = element["result"];
-					if (result != 1)
-					{
-						Log("Could not get details for addon {}", (std::string)element["publishedfileid"]);
-						continue;
-					}
-
-					auto path = std::filesystem::path((std::string)element["filename"]);
-					downloadQueue.push({ element["file_url"], path.filename().string() });
-				}
-			}
-			else Log("Response: result({}) resultcount({})", result, resultcount);
-		}
-		catch (...)
-		{
-			Log("Invalid response: {}", body);
-		}
-		});
-
-	if (!result)
-		FailExit("");
 }
 
-void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueue)
+void LoadStandaloneAddons(AddonList& addons)
 {
-	std::filesystem::current_path("wst/");
+	std::set<uintptr_t> addonIdList;
+	ReadFile(szAddonList, addonIdList);
+
+	for (auto id : addonIdList)
+	{
+		addons.try_emplace(id);
+	}
+}
+
+void DownloadAddons(Http::Client& client, AddonList& addons)
+{
 	std::ofstream os;
 
-	while (!downloadQueue.empty())
+	for (auto& item : addons)
 	{
-		StringTuplet entry = downloadQueue.front();
-		downloadQueue.pop();
+		auto& addon = item.second;
 
-		if (os.open(entry.second), !os)
+		if (os.open(addon.file), !os)
 		{
-			Log("Could not open {} Skipping...", entry.second);
+			Log("Could not open {} Skipping...", addon.file);
 			continue;
 		}
 
-		Log("Downloading {}", entry.second);
+		Log("Downloading {}", addon.file);
 
 		auto res = client.Get(
-			entry.first.c_str(),
+			addon.url.c_str(),
 			[&](const char* data, size_t data_length) {
 				os.write(data, data_length);
 				return (bool)os;
@@ -209,42 +126,7 @@ void DownloadAddons(Http::Client& client, std::queue<StringTuplet>& downloadQueu
 	}
 }
 
-void ReadFile(const char* name, std::list<uintptr_t>& ids, uintptr_t& collectionId)
+void Log(const std::string& str)
 {
-	uintptr_t entry;
-	std::ifstream is(name);
-
-	while (is >> entry)
-	{
-		ids.push_back(entry);
-	}
-
-	//Collection is always one and first at the list
-	//will change in future to support collection list
-	auto i = ids.begin();
-	if (i != ids.end())
-	{
-		collectionId = *i;
-		++i;
-		ids.pop_front();
-	}
-}
-
-bool Post(Http::Client& client, const char* path, Http::Params& params, PostResponse response)
-{
-	auto result = client.Post(path, params);
-	if (result.error != Http::NoError)
-	{
-		Log("Request error: {}", result.error);
-		return false;
-	}
-
-	Log("Request status: {}", result.status);
-	if (result.status == 200)
-	{
-		response(result.body);
-		return true;
-	}
-
-	return false;
+	std::cout << str << std::endl;
 }
