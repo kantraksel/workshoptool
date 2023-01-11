@@ -6,7 +6,7 @@ Tool has been designed for L4D2 dedicated servers (where host_workshop_collectio
 
 ## Getting started
 - Linux users: install CURL
-- [Download](../releases/latest) and unpack app
+- [Download](https://github.com/kantraksel/workshoptool/releases/latest) and unpack app
 
 ## How to use
 - Create *collections.txt* and *addons.txt* in tool's location
