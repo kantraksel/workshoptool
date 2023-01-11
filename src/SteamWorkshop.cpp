@@ -62,7 +62,7 @@ bool SteamWorkshop::ResolveCollections(Http::Client& client, std::set<uintptr_t>
 	int index = 0;
 	for (auto& item : collections)
 	{
-		params.emplace(std::format("publishedfileids[{}]", index), std::to_string(item));
+		params.emplace(Format("publishedfileids[{}]", index), std::to_string(item));
 		++index;
 	}
 
@@ -108,7 +108,7 @@ bool SteamWorkshop::ResolveAddons(Http::Client& client, AddonList& addons)
 	int index = 0;
 	for (auto& item : addons)
 	{
-		params.emplace(std::format("publishedfileids[{}]", index), std::to_string(item.first));
+		params.emplace(Format("publishedfileids[{}]", index), std::to_string(item.first));
 		++index;
 	}
 
@@ -144,7 +144,7 @@ bool SteamWorkshop::ResolveAddons(Http::Client& client, AddonList& addons)
 				if (addon.file.empty())
 				{
 					Log("Addon '{}' has no file name - setting file name to default value", addon.name);
-					addon.file = std::format("{}.addon", id);
+					addon.file = Format("{}.addon", id);
 				}
 
 				addon.size = element["file_size"];

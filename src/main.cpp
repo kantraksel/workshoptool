@@ -178,7 +178,7 @@ std::string ParseSize(uintptr_t size)
 		unit = "B";
 	}
 
-	return std::format("{:.2f}{}", fsize, unit);
+	return Format("{:.2f}{}", fsize, unit);
 }
 
 void Log(const std::string& str)

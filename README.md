@@ -10,6 +10,7 @@ Prebuilt binaries are not available due to Work In Progress project stage.
 
 ## Build
 - Requires CMake 3.15 and installed CURL library
+- Linux: requires fmt library
 
 ## How to use
 - Create *collections.txt* and *addons.txt* in tool's location
