@@ -12,7 +12,7 @@ namespace Http
 	struct Response
 	{
 		int error;
-		int status;
+		long status;
 		std::string body;
 	};
 
