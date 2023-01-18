@@ -21,4 +21,4 @@ Tool has been designed for L4D2 dedicated servers (where host_workshop_collectio
 
 ## Build
 - Requires CMake 3.15 and installed CURL library
-- Linux: requires fmt library
+- Linux: requires GCC 13.0.0 or later or fmt library

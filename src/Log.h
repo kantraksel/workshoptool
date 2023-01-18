@@ -17,8 +17,20 @@ void Log(const std::string& str = std::string());
 	{
 		return std::vformat(_Fmt._Str, std::make_format_args(_Args...));
 	}
+#elif __GNUC__ >= 13
+	#include <format>
 
-	#define FMT std
+	template <class... Args>
+	inline void Log(const std::format_string<Args...> _Fmt, Args&&... _Args)
+	{
+		Log(std::vformat(_Fmt.get(), std::make_format_args(_Args...)));
+	}
+
+	template <class... Args>
+	inline std::string Format(const std::format_string<Args...> _Fmt, Args&&... _Args)
+	{
+		return std::vformat(_Fmt.get(), std::make_format_args(_Args...));
+	}
 #else
 	#include <fmt/core.h>
 

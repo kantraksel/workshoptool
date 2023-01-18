@@ -20,7 +20,7 @@ target_include_directories(tool PRIVATE ${PROJECT_BINARY_DIR})
 target_link_libraries(tool PRIVATE CURL::libcurl nlohmann_json::nlohmann_json)
 install(TARGETS tool DESTINATION bin)
 
-if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND (NOT((CMAKE_CXX_COMPILER_ID STREQUAL "GNU") AND (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "13.0.0"))))
 	find_package(fmt REQUIRED)
 	target_link_libraries(tool PRIVATE fmt::fmt)
 endif()
