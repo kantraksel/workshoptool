@@ -85,6 +85,12 @@ bool SteamWorkshop::ResolveCollections(Http::Client& client, std::set<uintptr_t>
 				auto& children = collection["children"];
 				for (auto& element : children)
 				{
+					if (element.contains("filetype"))
+					{
+						int type = element["filetype"];
+						if (type == 2) continue;
+					}
+					
 					uintptr_t id = ToULL(element["publishedfileid"]);
 					auto result = addons.try_emplace(id);
 					if (result.second) ++addonsAdded;
