@@ -1,4 +1,4 @@
-project(WorkshopTool VERSION 2.0.0)
+project(WorkshopTool VERSION 2.1.0)
 
 option(TOOL_ENABLEGETCH "Enable user prompt on exit" OFF)
 

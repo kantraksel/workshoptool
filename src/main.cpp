@@ -119,6 +119,10 @@ void DownloadAddons(Http::Client& client, AddonList& addons)
 {
 	std::ofstream os;
 
+	size_t filesCompleted = 0;
+	size_t filesFailed = 0;
+	size_t filesSkipped = 0;
+	size_t filesProcessed = 0;
 	for (auto& item : addons)
 	{
 		auto& addon = item.second;
@@ -126,9 +130,11 @@ void DownloadAddons(Http::Client& client, AddonList& addons)
 		if (!addon.download)
 			continue;
 
+		++filesProcessed;
 		if (os.open(addon.file, std::ios::binary), !os)
 		{
 			Log("Could not open {} Skipping...", addon.file);
+			++filesSkipped;
 			continue;
 		}
 
@@ -143,9 +149,26 @@ void DownloadAddons(Http::Client& client, AddonList& addons)
 		);
 
 		os.close();
-		if (res.error == Http::NoError && res.status == 200) Log("Download completed");
-		else Log("Download failed!");
+		if (res.error == Http::NoError && res.status == 200)
+		{
+			Log("Download completed {}/{}", filesProcessed, addons.size());
+			++filesCompleted;
+		}
+		else
+		{
+			std::string result;
+			if (res.error == Http::NoError)
+				result = std::format("HTTP {}", res.status);
+			else
+				result = std::format("CURL {}", res.error);
+
+			Log("Download failed: {} {}/{}", result, filesProcessed, addons.size());
+			++filesFailed;
+		}
 	}
+
+	Log();
+	Log("Summary: {} downloaded, {} failed, {} skipped", filesCompleted, filesFailed, filesSkipped);
 }
 
 std::string ParseSize(uintptr_t size)
