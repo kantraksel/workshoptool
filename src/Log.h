@@ -1,9 +1,10 @@
 #pragma once
 #include <string>
+#include "version.h"
 
-void Log(const std::string& str = std::string());
+void Log(const std::string& str = {});
 
-#if _MSC_VER >= 1935 || __GNUC__ >= 13
+#if !USE_FMT && (_MSC_VER >= 1935 || __GNUC__ >= 13)
 	#include <format>
 
 	template <class... Args>
