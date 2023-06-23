@@ -16,6 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+      with:
+        submodules: true
     
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install libcurl4-openssl-dev libfmt-dev
