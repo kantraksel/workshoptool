@@ -24,14 +24,14 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND (NOT((CMAKE_CXX_COMPILER_ID STREQUAL "
 	set(TOOL_USE_FMT true)
 endif()
 
-if(TOOL_USE_FMT)
-	find_package(fmt REQUIRED)
-	target_link_libraries(tool PRIVATE fmt::fmt)
-endif()
-
 configure_file(version.h.in version.h)
 
 add_executable(tool main.cpp HttpClient.cpp SteamWorkshop.cpp)
 target_include_directories(tool PRIVATE ${PROJECT_BINARY_DIR})
 target_link_libraries(tool PRIVATE CURL::libcurl nlohmann_json::nlohmann_json)
 install(TARGETS tool DESTINATION bin)
+
+if(TOOL_USE_FMT)
+	find_package(fmt REQUIRED)
+	target_link_libraries(tool PRIVATE fmt::fmt)
+endif()

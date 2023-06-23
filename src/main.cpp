@@ -158,9 +158,9 @@ void DownloadAddons(Http::Client& client, AddonList& addons)
 		{
 			std::string result;
 			if (res.error == Http::NoError)
-				result = std::format("HTTP {}", res.status);
+				result = Format("HTTP {}", res.status);
 			else
-				result = std::format("CURL {}", res.error);
+				result = Format("CURL {}", res.error);
 
 			Log("Download failed: {} {}/{}", result, filesProcessed, addons.size());
 			++filesFailed;
